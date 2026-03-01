@@ -1,6 +1,6 @@
 # FitForm AI — Real-Time Exercise Recognition & Range of Motion Analysis
 
-[![CI/CD](https://github.com/YOUR_USERNAME/fitform-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/fitform-ai/actions)
+[![CI/CD](https://github.com/YOUR_USERNAME/fitform-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/DrGonzo79/fitform-ai/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Azure AI Foundry](https://img.shields.io/badge/Azure-AI%20Foundry-0078D4)](https://ai.azure.com)
@@ -294,4 +294,4 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 - [MediaPipe](https://google.github.io/mediapipe/) — Google's on-device ML framework
 - [DepthAI](https://docs.luxonis.com/) — Luxonis camera SDK
 - [Azure AI Foundry](https://ai.azure.com) — Microsoft's AI platform
-- Built by [Justin YOUR_LAST_NAME](https://github.com/YOUR_USERNAME) as a demonstration of full-stack AI/ML engineering
+- Built by [Justin Thompson](https://github.com/DrGonzo79) as a demonstration of full-stack AI/ML engineering
