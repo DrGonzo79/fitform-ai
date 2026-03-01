@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitForm AI — Live Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e4e4e7;
+            --muted: #71717a;
+            --accent: #3b82f6;
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
+            --purple: #a855f7;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .logo span { color: var(--accent); }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+            transition: background 0.3s;
+        }
+
+        .status-dot.connected { background: var(--green); }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .card-header {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--muted);
+            margin-bottom: 12px;
+        }
+
+        /* Exercise Display */
+        .exercise-name {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-transform: capitalize;
+        }
+
+        .phase-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .phase-up { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+        .phase-down { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+        .phase-neutral { background: rgba(113, 113, 122, 0.15); color: var(--muted); }
+
+        /* Rep Counter */
+        .rep-count {
+            font-size: 72px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--accent);
+        }
+
+        .rep-label {
+            font-size: 14px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        /* Angles Table */
+        .angles-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .angle-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .angle-name { color: var(--muted); }
+        .angle-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        /* ROM Summary */
+        .rom-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .rom-item:last-child { border-bottom: none; }
+
+        .rom-bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            width: 100px;
+            overflow: hidden;
+        }
+
+        .rom-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        /* Chart */
+        .chart-container {
+            grid-column: 1 / -1;
+            height: 250px;
+        }
+
+        /* Coaching */
+        .coaching-card {
+            grid-column: 1 / -1;
+        }
+
+        .coaching-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+
+        .coaching-btn {
+            margin-top: 12px;
+            padding: 8px 20px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .coaching-btn:hover { opacity: 0.85; }
+        .coaching-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .score-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .score-good { background: rgba(34,197,94,0.15); color: var(--green); }
+        .score-ok { background: rgba(234,179,8,0.15); color: var(--yellow); }
+        .score-bad { background: rgba(239,68,68,0.15); color: var(--red); }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            grid-column: 1 / -1;
+        }
+
+        .empty-state h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            color: var(--muted);
+            font-size: 14px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">FitForm <span>AI</span></div>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </header>
+
+    <div class="grid" id="mainGrid">
+        <div class="empty-state" id="emptyState">
+            <h2 class="pulse">Waiting for Edge Device...</h2>
+            <p>Start the edge client on your Jetson Orin Nano to begin real-time exercise tracking.</p>
+            <p style="margin-top: 12px; font-family: monospace; font-size: 12px; color: var(--accent);">
+                python edge/main.py
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // ---- State ----
+        let currentData = null;
+        let angleHistory = [];
+        let chart = null;
+        let isConnected = false;
+        const MAX_HISTORY = 100;
+
+        // ---- SSE Connection ----
+        function connectSSE() {
+            const source = new EventSource('/api/v1/exercises/stream');
+
+            source.onopen = () => {
+                isConnected = true;
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Live';
+            };
+
+            source.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    currentData = data;
+                    updateDashboard(data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            };
+
+            source.onerror = () => {
+                isConnected = false;
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Reconnecting...';
+                source.close();
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        // ---- Dashboard Update ----
+        function updateDashboard(data) {
+            const grid = document.getElementById('mainGrid');
+            const empty = document.getElementById('emptyState');
+            if (empty) empty.remove();
+
+            // Track angle history
+            if (data.angles) {
+                const primaryAngle = getPrimaryAngle(data);
+                angleHistory.push({ time: Date.now(), angle: primaryAngle, exercise: data.exercise });
+                if (angleHistory.length > MAX_HISTORY) angleHistory.shift();
+            }
+
+            grid.innerHTML = `
+                <!-- Exercise Type -->
+                <div class="card">
+                    <div class="card-header">Current Exercise</div>
+                    <div class="exercise-name">${formatExercise(data.exercise)}</div>
+                    <div class="phase-badge phase-${data.phase}">${data.phase}</div>
+                    <div style="margin-top: 12px; font-size: 13px; color: var(--muted)">
+                        Confidence: ${(data.confidence * 100).toFixed(0)}%
+                    </div>
+                </div>
+
+                <!-- Rep Counter -->
+                <div class="card" style="text-align: center;">
+                    <div class="card-header">Repetitions</div>
+                    <div class="rep-count">${data.rep_count}</div>
+                    <div class="rep-label">total reps</div>
+                </div>
+
+                <!-- Joint Angles -->
+                <div class="card">
+                    <div class="card-header">Joint Angles (Live)</div>
+                    <div class="angles-grid">
+                        ${Object.entries(data.angles || {}).map(([name, val]) => `
+                            <div class="angle-item">
+                                <span class="angle-name">${formatJoint(name)}</span>
+                                <span class="angle-value">${val.toFixed(0)}°</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Angle Chart -->
+                <div class="card chart-container">
+                    <div class="card-header">Primary Joint Angle Over Time</div>
+                    <canvas id="angleChart"></canvas>
+                </div>
+
+                <!-- ROM Summary -->
+                <div class="card" style="grid-column: 1 / 3;">
+                    <div class="card-header">Range of Motion Summary</div>
+                    ${Object.entries(data.rom_summary || {}).filter(([_, v]) => v.range > 5).map(([name, stats]) => `
+                        <div class="rom-item">
+                            <span style="width: 140px">${formatJoint(name)}</span>
+                            <span style="font-variant-numeric: tabular-nums">${stats.min.toFixed(0)}° – ${stats.max.toFixed(0)}°</span>
+                            <div class="rom-bar">
+                                <div class="rom-bar-fill" style="width: ${(stats.range / 180 * 100).toFixed(0)}%"></div>
+                            </div>
+                            <span style="font-weight: 600; font-variant-numeric: tabular-nums">${stats.range.toFixed(0)}°</span>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Coaching -->
+                <div class="card">
+                    <div class="card-header">AI Coach</div>
+                    <div id="coachingContent">
+                        <p style="color: var(--muted); font-size: 13px;">
+                            Click below to get AI-powered form analysis using Azure OpenAI.
+                        </p>
+                    </div>
+                    <button class="coaching-btn" onclick="requestCoaching('${data.session_id}')">
+                        Get Coaching Feedback
+                    </button>
+                </div>
+            `;
+
+            renderChart();
+        }
+
+        // ---- Chart ----
+        function renderChart() {
+            const canvas = document.getElementById('angleChart');
+            if (!canvas || angleHistory.length < 2) return;
+
+            const ctx = canvas.getContext('2d');
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: angleHistory.map((_, i) => i),
+                    datasets: [{
+                        label: 'Joint Angle (°)',
+                        data: angleHistory.map(h => h.angle),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 0 },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            min: 0, max: 180,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#71717a', font: { size: 11 } },
+                        },
+                    },
+                    plugins: {
+                        legend: { display: false },
+                    },
+                },
+            });
+        }
+
+        // ---- Coaching ----
+        async function requestCoaching(sessionId) {
+            const btn = document.querySelector('.coaching-btn');
+            const content = document.getElementById('coachingContent');
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+
+            try {
+                const resp = await fetch(`/api/v1/sessions/${sessionId}/coach`, { method: 'POST' });
+                const data = await resp.json();
+
+                let scoreClass = 'score-ok';
+                if (data.form_score >= 7) scoreClass = 'score-good';
+                else if (data.form_score < 5) scoreClass = 'score-bad';
+
+                content.innerHTML = `
+                    ${data.form_score ? `<div class="score-badge ${scoreClass}">Form Score: ${data.form_score}/10</div>` : ''}
+                    <div class="coaching-text">${data.feedback}</div>
+                    ${data.recommendations?.length ? `
+                        <ul style="margin-top: 12px; padding-left: 20px; font-size: 13px; color: var(--muted);">
+                            ${data.recommendations.map(r => `<li style="margin-bottom: 4px">${r}</li>`).join('')}
+                        </ul>
+                    ` : ''}
+                    <div style="margin-top: 8px; font-size: 11px; color: var(--muted)">
+                        Model: ${data.model}
+                    </div>
+                `;
+            } catch (e) {
+                content.innerHTML = `<p style="color: var(--red)">Error: ${e.message}</p>`;
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Refresh Feedback';
+        }
+
+        // ---- Helpers ----
+        function formatExercise(name) {
+            return (name || 'unknown').replace(/_/g, ' ');
+        }
+
+        function formatJoint(name) {
+            return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function getPrimaryAngle(data) {
+            const a = data.angles || {};
+            if (data.exercise === 'air_squat') return (a.left_knee + a.right_knee) / 2;
+            if (data.exercise === 'push_up') return (a.left_elbow + a.right_elbow) / 2;
+            if (data.exercise === 'sit_up') return (a.left_hip + a.right_hip) / 2;
+            return Object.values(a)[0] || 0;
+        }
+
+        // ---- Init ----
+        connectSSE();
+    </script>
+</body>
+</html>

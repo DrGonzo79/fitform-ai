@@ -1,0 +1,63 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check edge/ backend/ tests/
+      - run: ruff format --check edge/ backend/ tests/
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r backend/requirements.txt pytest httpx
+      - run: pytest tests/test_api.py -v --tb=short
+
+  test-edge:
+    name: Edge Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install numpy mediapipe opencv-python-headless pytest
+      - run: pytest tests/test_classifier.py tests/test_rom.py -v --tb=short
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-edge]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.backend -t fitform-ai-backend .
+      - run: |
+          docker run -d --name test-api -p 8000:8000 fitform-ai-backend
+          sleep 5
+          curl -f http://localhost:8000/health
+          docker stop test-api
