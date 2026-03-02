@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from dependencies import limiter
 from models import (
     CoachingResponse,
     SessionCreate,
@@ -67,12 +68,15 @@ async def update_session(session_id: str, body: SessionUpdate):
 
 
 @router.post("/{session_id}/coach", response_model=CoachingResponse)
-async def get_coaching(session_id: str):
+@limiter.limit("5/minute")
+async def get_coaching(session_id: str, request: Request):
     """
     Generate AI coaching feedback for a session.
 
     Uses Azure OpenAI (GPT-4o) to analyze exercise data and
     produce personalized form corrections and recommendations.
+
+    Rate-limited to 5 requests per minute per client.
     """
     from main import ai_coach, session_store
 

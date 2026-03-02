@@ -2,7 +2,7 @@
 
 ## Reporting Vulnerabilities
 
-If you discover a security vulnerability, please report it responsibly by emailing [your-email@example.com]. Do not open a public GitHub issue for security vulnerabilities.
+If you discover a security vulnerability, please report it responsibly by emailing <justin@dgcdigital.com> . Do not open a public GitHub issue for security vulnerabilities.
 
 ## Supported Versions
 

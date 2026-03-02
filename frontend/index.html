@@ -274,6 +274,7 @@
         let angleHistory = [];
         let chart = null;
         let isConnected = false;
+        let cachedCoaching = null;
         const MAX_HISTORY = 100;
 
         // ---- SSE Connection ----
@@ -374,12 +375,14 @@
                 <div class="card">
                     <div class="card-header">AI Coach</div>
                     <div id="coachingContent">
+                        ${cachedCoaching ? cachedCoaching : `
                         <p style="color: var(--muted); font-size: 13px;">
                             Click below to get AI-powered form analysis using Azure OpenAI.
                         </p>
+                        `}
                     </div>
                     <button class="coaching-btn" onclick="requestCoaching('${data.session_id}')">
-                        Get Coaching Feedback
+                        ${cachedCoaching ? 'Refresh Feedback' : 'Get Coaching Feedback'}
                     </button>
                 </div>
             `;
@@ -456,8 +459,10 @@
                         Model: ${data.model}
                     </div>
                 `;
+                cachedCoaching = content.innerHTML;
             } catch (e) {
                 content.innerHTML = `<p style="color: var(--red)">Error: ${e.message}</p>`;
+                cachedCoaching = content.innerHTML;
             }
 
             btn.disabled = false;
