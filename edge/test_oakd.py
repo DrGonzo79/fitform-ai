@@ -40,12 +40,15 @@ else:
     pipeline = dai.Pipeline()
     cam = pipeline.create(dai.node.Camera)
     cam.build()
-    q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
-    with dai.Device(pipeline) as device:
-        print(f"Device: {device.getDeviceName()}")
+    out = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+    q = out.createOutputQueue()
+    pipeline.start()
+    try:
         print(f"OAK-D Lite streaming! Reading {FRAMES} frames...")
         for i in range(FRAMES):
             frame = q.get().getCvFrame()
             print(f"  Frame {i + 1}: {frame.shape}")
             time.sleep(0.03)
         print("Camera test PASSED!")
+    finally:
+        pipeline.stop()
