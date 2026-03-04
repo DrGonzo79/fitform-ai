@@ -134,7 +134,6 @@ def _oakd_v3(dai):
 
     # RGB camera
     cam = pipeline.create(dai.node.Camera)
-    cam.setFps(config.camera_fps)
     q_rgb = cam.requestOutput((w, h), type=dai.ImgFrame.Type.BGR888p)
 
     # Stereo depth
