@@ -37,10 +37,12 @@ if HAS_XLINK:
             time.sleep(0.03)
         print("Camera test PASSED!")
 else:
-    with dai.Device() as device:
+    pipeline = dai.Pipeline()
+    cam = pipeline.create(dai.node.Camera)
+    cam.setFps(30)
+    q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+    with dai.Device(pipeline) as device:
         print(f"Device: {device.getDeviceName()}")
-        cam = device.create(dai.node.Camera).build()
-        q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p, fps=30)
         print(f"OAK-D Lite streaming! Reading {FRAMES} frames...")
         for i in range(FRAMES):
             frame = q.get().getCvFrame()
