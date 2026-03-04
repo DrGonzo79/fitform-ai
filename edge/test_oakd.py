@@ -39,6 +39,7 @@ if HAS_XLINK:
 else:
     pipeline = dai.Pipeline()
     cam = pipeline.create(dai.node.Camera)
+    cam.build()
     q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
     with dai.Device(pipeline) as device:
         print(f"Device: {device.getDeviceName()}")
