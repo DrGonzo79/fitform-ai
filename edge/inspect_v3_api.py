@@ -1,122 +1,134 @@
 """
-Introspect DepthAI v3 Camera + Device API to determine the correct
-initialization sequence.
+DepthAI v3 API — find the correct pipeline-driven initialization.
+
+In v3, Device() no longer accepts a pipeline. The Pipeline itself
+manages device connection via build()/start()/run().
+
+Each approach runs in a subprocess so a leaked device connection
+can't poison later tests.
 
 Usage:
     python edge/inspect_v3_api.py
 """
 
-import depthai as dai
-import inspect
+import subprocess
+import sys
+import textwrap
 
-print(f"DepthAI version: {dai.__version__}")
-print()
-
-# 1. Check Camera.build() signature
-cam_cls = dai.node.Camera
-print("=== Camera.build() signature ===")
-try:
-    build_method = getattr(cam_cls, "build", None)
-    if build_method:
-        sig = inspect.signature(build_method)
-        print(f"  build{sig}")
-        print(f"  docstring: {build_method.__doc__}")
-    else:
-        print("  NO build method found")
-except Exception as e:
-    print(f"  Error inspecting build: {e}")
-
-print()
-
-# 2. Check requestOutput signature
-print("=== Camera.requestOutput() signature ===")
-try:
-    req_method = getattr(cam_cls, "requestOutput", None)
-    if req_method:
-        sig = inspect.signature(req_method)
-        print(f"  requestOutput{sig}")
-        print(f"  docstring: {req_method.__doc__}")
-    else:
-        print("  NO requestOutput method found")
-except Exception as e:
-    print(f"  Error inspecting requestOutput: {e}")
-
-print()
-
-# 3. Check if Pipeline has a start/build method
-print("=== Pipeline methods (start/build/run) ===")
-p_methods = [m for m in dir(dai.Pipeline) if not m.startswith("_")]
-for m in p_methods:
-    if any(k in m.lower() for k in ["start", "build", "run", "init", "create"]):
-        print(f"  {m}")
-print(f"  All pipeline methods: {p_methods}")
-
-print()
-
-# 4. Check Device constructor signatures
-print("=== Device constructor / init ===")
-try:
-    sig = inspect.signature(dai.Device.__init__)
-    print(f"  Device.__init__{sig}")
-except Exception as e:
-    print(f"  Error: {e}")
-
-print()
-
-# 5. Try approach A: build() inside Device context
-print("=== Approach A: pipeline -> Device -> build -> requestOutput ===")
-try:
-    pipeline = dai.Pipeline()
-    cam = pipeline.create(dai.node.Camera)
-    with dai.Device(pipeline) as device:
-        cam.build()
-        q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
-        frame = q.get().getCvFrame()
-        print(f"  SUCCESS! Frame shape: {frame.shape}")
-except Exception as e:
-    print(f"  FAILED: {type(e).__name__}: {e}")
-
-print()
-
-# 6. Try approach B: Device() without pipeline, then create nodes
-print("=== Approach B: Device() -> create -> build -> requestOutput ===")
-try:
-    with dai.Device() as device:
-        pipeline = device.getPipeline()
+APPROACHES = {
+    "A": textwrap.dedent("""\
+        # Pipeline.start() approach
+        import depthai as dai, time
+        pipeline = dai.Pipeline()
         cam = pipeline.create(dai.node.Camera)
         cam.build()
         q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+        pipeline.start()
         frame = q.get().getCvFrame()
-        print(f"  SUCCESS! Frame shape: {frame.shape}")
-except Exception as e:
-    print(f"  FAILED: {type(e).__name__}: {e}")
+        print(f"SUCCESS! Frame shape: {frame.shape}")
+        pipeline.stop()
+    """),
 
-print()
-
-# 7. Try approach C: Pipeline -> build -> requestOutput -> Device
-print("=== Approach C: pipeline -> build -> requestOutput -> Device (current code) ===")
-try:
-    pipeline = dai.Pipeline()
-    cam = pipeline.create(dai.node.Camera)
-    cam.build()
-    q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
-    with dai.Device(pipeline) as device:
+    "B": textwrap.dedent("""\
+        # Pipeline.start() — build node AFTER pipeline.start()
+        import depthai as dai, time
+        pipeline = dai.Pipeline()
+        cam = pipeline.create(dai.node.Camera)
+        pipeline.start()
+        cam.build()
+        q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
         frame = q.get().getCvFrame()
-        print(f"  SUCCESS! Frame shape: {frame.shape}")
-except Exception as e:
-    print(f"  FAILED: {type(e).__name__}: {e}")
+        print(f"SUCCESS! Frame shape: {frame.shape}")
+        pipeline.stop()
+    """),
 
-print()
+    "C": textwrap.dedent("""\
+        # Device() then pipeline.start(device)
+        import depthai as dai, time
+        pipeline = dai.Pipeline()
+        cam = pipeline.create(dai.node.Camera)
+        cam.build()
+        q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+        with dai.Device() as device:
+            pipeline.start(device)
+            frame = q.get().getCvFrame()
+            print(f"SUCCESS! Frame shape: {frame.shape}")
+            pipeline.stop()
+    """),
 
-# 8. Try approach D: Device() no-arg, create camera directly
-print("=== Approach D: Device() no pipeline arg ===")
-try:
-    dev_methods = [m for m in dir(dai.Device) if not m.startswith("_") and "create" in m.lower()]
-    print(f"  Device create methods: {dev_methods}")
-    pipe_methods = [m for m in dir(dai.Device) if not m.startswith("_") and "pipe" in m.lower()]
-    print(f"  Device pipeline methods: {pipe_methods}")
-except Exception as e:
-    print(f"  FAILED: {type(e).__name__}: {e}")
+    "D": textwrap.dedent("""\
+        # Device() then pipeline.start() (no device arg)
+        import depthai as dai, time
+        with dai.Device() as device:
+            pipeline = dai.Pipeline()
+            cam = pipeline.create(dai.node.Camera)
+            cam.build()
+            q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+            pipeline.start()
+            frame = q.get().getCvFrame()
+            print(f"SUCCESS! Frame shape: {frame.shape}")
+            pipeline.stop()
+    """),
 
-print()
-print("=== Done ===")
+    "E": textwrap.dedent("""\
+        # pipeline.run() instead of start (blocks, so use timeout)
+        import depthai as dai, time, threading
+        pipeline = dai.Pipeline()
+        cam = pipeline.create(dai.node.Camera)
+        cam.build()
+        q = cam.requestOutput((640, 480), type=dai.ImgFrame.Type.BGR888p)
+        t = threading.Thread(target=pipeline.run, daemon=True)
+        t.start()
+        time.sleep(2)
+        frame = q.get().getCvFrame()
+        print(f"SUCCESS! Frame shape: {frame.shape}")
+        pipeline.stop()
+    """),
+
+    "F": textwrap.dedent("""\
+        # Inspect pipeline.start() signature and try passing device
+        import depthai as dai
+        print("pipeline.start doc:", dai.Pipeline.start.__doc__)
+        print("pipeline.build doc:", dai.Pipeline.build.__doc__)
+        print("pipeline.run doc:", dai.Pipeline.run.__doc__)
+    """),
+}
+
+
+def run_approach(label: str, code: str) -> None:
+    print(f"=== Approach {label} ===")
+    for line in code.strip().splitlines()[:2]:
+        print(f"  {line.strip()}")
+    print()
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    if result.stdout.strip():
+        print(f"  stdout: {result.stdout.strip()}")
+    if result.stderr.strip():
+        # Only show last 5 lines of stderr to keep it readable
+        err_lines = result.stderr.strip().splitlines()
+        for line in err_lines[-5:]:
+            print(f"  stderr: {line}")
+    print()
+
+
+if __name__ == "__main__":
+    import depthai as dai
+    print(f"DepthAI version: {dai.__version__}")
+    print()
+
+    # Run F first (docs inspection, no device needed)
+    run_approach("F", APPROACHES["F"])
+
+    # Then try each device approach in isolation
+    for label in ["A", "B", "C", "D", "E"]:
+        try:
+            run_approach(label, APPROACHES[label])
+        except subprocess.TimeoutExpired:
+            print(f"  TIMED OUT (15s)\n")
