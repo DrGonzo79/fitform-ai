@@ -57,64 +57,108 @@ def create_oakd_camera():
 
     Returns a generator that yields (bgr_frame, depth_frame) tuples.
     Falls back to webcam if DepthAI is not available.
+
+    Supports both DepthAI v2 (XLinkOut nodes) and v3 (requestOutput API).
     """
     try:
         import depthai as dai
 
-        pipeline = dai.Pipeline()
+        _has_xlink = hasattr(dai.node, "XLinkOut")
 
-        # RGB camera
-        cam_rgb = pipeline.create(dai.node.ColorCamera)
-        cam_rgb.setPreviewSize(config.camera_resolution[0], config.camera_resolution[1])
-        cam_rgb.setInterleaved(False)
-        cam_rgb.setFps(config.camera_fps)
-        cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
-
-        xout_rgb = pipeline.create(dai.node.XLinkOut)
-        xout_rgb.setStreamName("rgb")
-        cam_rgb.preview.link(xout_rgb.input)
-
-        # Stereo depth (OAK-D Lite)
-        if config.use_depth:
-            mono_left = pipeline.create(dai.node.MonoCamera)
-            mono_right = pipeline.create(dai.node.MonoCamera)
-            stereo = pipeline.create(dai.node.StereoDepth)
-
-            mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
-            mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
-            mono_left.setCamera("left")
-            mono_right.setCamera("right")
-
-            stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
-
-            mono_left.out.link(stereo.left)
-            mono_right.out.link(stereo.right)
-
-            xout_depth = pipeline.create(dai.node.XLinkOut)
-            xout_depth.setStreamName("depth")
-            stereo.depth.link(xout_depth.input)
-
-        with dai.Device(pipeline) as device:
-            q_rgb = device.getOutputQueue("rgb", maxSize=4, blocking=False)
-            q_depth = device.getOutputQueue("depth", maxSize=4, blocking=False) if config.use_depth else None
-
-            logger.info("OAK-D Lite camera initialized")
-
-            while True:
-                in_rgb = q_rgb.get()
-                frame = in_rgb.getCvFrame()
-
-                depth_frame = None
-                if q_depth:
-                    in_depth = q_depth.tryGet()
-                    if in_depth:
-                        depth_frame = in_depth.getFrame()
-
-                yield frame, depth_frame
+        if _has_xlink:
+            yield from _oakd_v2(dai)
+        else:
+            yield from _oakd_v3(dai)
 
     except (ImportError, RuntimeError) as e:
         logger.warning("DepthAI not available (%s), falling back to webcam", e)
         yield from create_webcam_camera()
+
+
+def _oakd_v2(dai):
+    """DepthAI v2.x pipeline using XLinkOut nodes."""
+    pipeline = dai.Pipeline()
+
+    cam_rgb = pipeline.create(dai.node.ColorCamera)
+    cam_rgb.setPreviewSize(config.camera_resolution[0], config.camera_resolution[1])
+    cam_rgb.setInterleaved(False)
+    cam_rgb.setFps(config.camera_fps)
+    cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
+
+    xout_rgb = pipeline.create(dai.node.XLinkOut)
+    xout_rgb.setStreamName("rgb")
+    cam_rgb.preview.link(xout_rgb.input)
+
+    if config.use_depth:
+        mono_left = pipeline.create(dai.node.MonoCamera)
+        mono_right = pipeline.create(dai.node.MonoCamera)
+        stereo = pipeline.create(dai.node.StereoDepth)
+
+        mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        mono_left.setCamera("left")
+        mono_right.setCamera("right")
+
+        stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
+        mono_left.out.link(stereo.left)
+        mono_right.out.link(stereo.right)
+
+        xout_depth = pipeline.create(dai.node.XLinkOut)
+        xout_depth.setStreamName("depth")
+        stereo.depth.link(xout_depth.input)
+
+    with dai.Device(pipeline) as device:
+        q_rgb = device.getOutputQueue("rgb", maxSize=4, blocking=False)
+        q_depth = device.getOutputQueue("depth", maxSize=4, blocking=False) if config.use_depth else None
+
+        logger.info("OAK-D Lite camera initialized (DepthAI v2 API)")
+
+        while True:
+            in_rgb = q_rgb.get()
+            frame = in_rgb.getCvFrame()
+
+            depth_frame = None
+            if q_depth:
+                in_depth = q_depth.tryGet()
+                if in_depth:
+                    depth_frame = in_depth.getFrame()
+
+            yield frame, depth_frame
+
+
+def _oakd_v3(dai):
+    """DepthAI v3.x pipeline using requestOutput API (no XLinkOut)."""
+    w, h = config.camera_resolution
+
+    with dai.Device() as device:
+        # RGB camera
+        cam = device.create(dai.node.Camera).build()
+        q_rgb = cam.requestOutput(
+            (w, h), type=dai.ImgFrame.Type.BGR888p, fps=config.camera_fps
+        )
+
+        # Stereo depth
+        q_depth = None
+        if config.use_depth:
+            try:
+                stereo = device.create(dai.node.StereoDepth).build()
+                q_depth = stereo.requestOutput((w, h))
+            except Exception as e:
+                logger.warning("Stereo depth not available (%s), continuing RGB-only", e)
+
+        logger.info("OAK-D Lite camera initialized (DepthAI v3 API)")
+
+        while device.isRunning():
+            in_rgb = q_rgb.get()
+            frame = in_rgb.getCvFrame()
+
+            depth_frame = None
+            if q_depth:
+                in_depth = q_depth.tryGet()
+                if in_depth:
+                    depth_frame = in_depth.getCvFrame()
+
+            yield frame, depth_frame
 
 
 def create_webcam_camera():
