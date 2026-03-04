@@ -137,14 +137,19 @@ def _oakd_v3(dai):
     cam.build()
     q_rgb = cam.requestOutput((w, h), type=dai.ImgFrame.Type.BGR888p).createOutputQueue()
 
-    # Stereo depth
+    # Stereo depth — optional, remove node from pipeline on failure so
+    # pipeline.start() doesn't complain about unconnected outputs.
     q_depth = None
     if config.use_depth:
+        stereo = None
         try:
             stereo = pipeline.create(dai.node.StereoDepth)
             q_depth = stereo.requestOutput((w, h)).createOutputQueue()
         except Exception as e:
             logger.warning("Stereo depth not available (%s), continuing RGB-only", e)
+            q_depth = None
+            if stereo is not None:
+                pipeline.remove(stereo)
 
     pipeline.start()
     try:
